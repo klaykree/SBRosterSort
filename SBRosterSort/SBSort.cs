@@ -9,10 +9,11 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Newtonsoft.Json;
 
 namespace SBRosterSort
 {
-    public partial class Form1 : Form
+    public partial class SBSort : Form
     {
         class Record
         {
@@ -25,20 +26,26 @@ namespace SBRosterSort
             public uint Matches = 0;
             public uint Wins = 0;
             public uint Losses = 0;
-            public Dictionary<string, MinimalRecord> SpecificFights = new Dictionary<string, MinimalRecord>();
         }
 
-        class MinimalRecord
+        struct SpecificFight
         {
-            public uint Matches = 0;
-            public uint Wins = 0;
-            public uint Losses = 0;
+            public SpecificFight(uint NameSplitIndex)
+            {
+                this.NameSplitIndex = NameSplitIndex;
+                Fighter1Wins = 0;
+                Fighter2Wins = 0;
+        }
+
+            public uint NameSplitIndex;
+            public uint Fighter1Wins;
+            public uint Fighter2Wins;
         }
 
         struct FighterPair
         {
-            public Record Left;
-            public Record Right;
+            public Record Fighter1;
+            public Record Fighter2;
         }
 
         System.IO.TextReader m_StreamInput;
@@ -46,29 +53,25 @@ namespace SBRosterSort
 
         Thread m_PollChatThread;
 
-        Dictionary<string, Record> m_XTier;
-        Dictionary<string, Record> m_STier;
-        Dictionary<string, Record> m_ATier;
-        Dictionary<string, Record> m_BTier;
+        Dictionary<string, Record> m_XTier = new Dictionary<string, Record>();
+        Dictionary<string, Record> m_STier = new Dictionary<string, Record>();
+        Dictionary<string, Record> m_ATier = new Dictionary<string, Record>();
+        Dictionary<string, Record> m_BTier = new Dictionary<string, Record>();
+        Dictionary<string, SpecificFight> m_SpecificFights = new Dictionary<string, SpecificFight>();
 
         Dictionary<string, Record> m_CurrentTier;
         FighterPair m_CurrentFighters;
 
-        public Form1()
+        public SBSort()
         {
             InitializeComponent();
-
-            m_XTier = new Dictionary<string, Record>();
-            m_STier = new Dictionary<string, Record>();
-            m_ATier = new Dictionary<string, Record>();
-            m_BTier = new Dictionary<string, Record>();
-
-            Connect();
         }
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            Application.Idle += HandleApplicationIdle;
+            Connect();
+
+            //Application.Idle += HandleApplicationIdle;
 
             m_PollChatThread = new Thread(new ThreadStart(PollChat));
             m_PollChatThread.Start();
@@ -76,11 +79,19 @@ namespace SBRosterSort
 
         public void PollChat()
         {
+            m_StreamInput = new System.IO.StreamReader("DummySB.txt");
+
             string Buf;
 
             //Process each line received from irc server
             for(Buf = m_StreamInput.ReadLine() ; ; Buf = m_StreamInput.ReadLine())
             {
+                if(Buf == null)
+                    return;
+
+                if(Buf == string.Empty)
+                    continue;
+
                 //Send pong reply to any ping messages
                 if(Buf.StartsWith("PING "))
                 {
@@ -88,8 +99,11 @@ namespace SBRosterSort
                     m_StreamOutput.Flush();
                 }
 
-                if(Buf[0] != ':') continue;
+                if(Buf[0] != ':')
+                    continue;
 
+                Console.WriteLine(Buf);
+                
                 //IRC commands come in one of these formats:
                 //:NICK!USER@HOST COMMAND ARGS ... :DATA\r\n
                 //:SERVER COMAND ARGS ... :DATA\r\n
@@ -138,17 +152,14 @@ namespace SBRosterSort
                 {
                     return m_XTier;
                 }
-
                 if(a_Message[MatchmakingIndex - 2] == 'S')
                 {
                     return m_STier;
                 }
-
                 if(a_Message[MatchmakingIndex - 2] == 'A')
                 {
                     return m_ATier;
                 }
-
                 else if(a_Message[MatchmakingIndex - 2] == 'B')
                 {
                     return m_BTier;
@@ -163,34 +174,34 @@ namespace SBRosterSort
         {
             FighterPair Pair = new FighterPair();
 
-            string LeftName = string.Empty;
-            string RightName = string.Empty;
+            string RedName = string.Empty;
+            string BlueName = string.Empty;
 
             int RedNameIndex = a_Message.IndexOf("OPEN for");
 
             if(RedNameIndex != -1)
             {
                 int BetweenFighterNamesIndex = a_Message.IndexOf(" vs ");
-                RedNameIndex += 9;
+                RedNameIndex += 9; //'OPEN for ' is 9 characters long
 
-                LeftName = a_Message.Substring(RedNameIndex, BetweenFighterNamesIndex - RedNameIndex);
+                RedName = a_Message.Substring(RedNameIndex, BetweenFighterNamesIndex - RedNameIndex);
 
-                int BlueNameIndex = BetweenFighterNamesIndex + 4;
+                int BlueNameIndex = BetweenFighterNamesIndex + 4; //' vs ' is 4 characters long
                 int BlueTeamNameEndIndex = a_Message.IndexOf("! (");
 
-                RightName = a_Message.Substring(BlueNameIndex, BlueTeamNameEndIndex - BlueNameIndex);
+                BlueName = a_Message.Substring(BlueNameIndex, BlueTeamNameEndIndex - BlueNameIndex);
             }
             
-            if(!m_CurrentTier.TryGetValue(LeftName, out Pair.Left))
+            if(!m_CurrentTier.TryGetValue(RedName, out Pair.Fighter1))
             {
-                m_CurrentTier.Add(LeftName, new Record(LeftName));
-                Pair.Left = m_CurrentTier[LeftName];
+                m_CurrentTier.Add(RedName, new Record(RedName));
+                Pair.Fighter1 = m_CurrentTier[RedName];
             }
 
-            if(!m_CurrentTier.TryGetValue(RightName, out Pair.Right))
+            if(!m_CurrentTier.TryGetValue(BlueName, out Pair.Fighter2))
             {
-                m_CurrentTier.Add(RightName, new Record(RightName));
-                Pair.Right = m_CurrentTier[RightName];
+                m_CurrentTier.Add(BlueName, new Record(BlueName));
+                Pair.Fighter2 = m_CurrentTier[BlueName];
             }
 
             return Pair;
@@ -199,54 +210,46 @@ namespace SBRosterSort
         //Buront wins! Payouts to Team Red. 23 more matches until the next tournament!
         void UpdateCurrentFightersRecords(string a_Message)
         {
-            if(m_CurrentFighters.Left == null || m_CurrentFighters.Right == null)
+            if(m_CurrentFighters.Fighter1 == null || m_CurrentFighters.Fighter2 == null)
             {
                 return;
             }
 
+            int LexOrder = String.Compare(m_CurrentFighters.Fighter1.Name, m_CurrentFighters.Fighter2.Name);
+            Record LowerNamed = 
+            string LexFightName = LexOrder <= 0 ? m_CurrentFighters.Fighter1.Name + m_CurrentFighters.Fighter2.Name : m_CurrentFighters.Fighter2.Name + m_CurrentFighters.Fighter1.Name;
+            if(!m_SpecificFights.ContainsKey(LexFightName))
+            {
+                SpecificFight Fight = new SpecificFight();
+                Fight.
+                m_SpecificFights[LexFightName] = Fight;
+            }
+            
             Record Win = null;
             Record Lose = null;
 
-            if(a_Message.Contains("Payouts to Team Red"))
+            //Not a foolproof way to check if this win message followed the fight open message but better than nothing
+            if(a_Message.Contains("Payouts to Team Red") && a_Message.Contains(m_CurrentFighters.Fighter1.Name))
             {
-                Win = m_CurrentFighters.Left;
-                Lose = m_CurrentFighters.Right;
+                Win = m_CurrentFighters.Fighter1;
+                Lose = m_CurrentFighters.Fighter2;
             }
-            else if(a_Message.Contains("Payouts to Team Blue"))
+            else if(a_Message.Contains("Payouts to Team Blue") && a_Message.Contains(m_CurrentFighters.Fighter2.Name))
             {
-                Win = m_CurrentFighters.Right;
-                Lose = m_CurrentFighters.Left;
+                Win = m_CurrentFighters.Fighter2;
+                Lose = m_CurrentFighters.Fighter1;
             }
 
             if(Win == null || Lose == null)
             {
                 Console.WriteLine("UpdateCurrentFightersRecords failed to find who won/lost");
+                return;
             }
 
             Win.Matches += 1;
             Win.Wins += 1;
             Lose.Matches += 1;
             Lose.Losses += 1;
-
-            MinimalRecord LostOpponent = null;
-            if(!Win.SpecificFights.TryGetValue(Lose.Name, out LostOpponent))
-            {
-                Win.SpecificFights.Add(Lose.Name, new MinimalRecord());
-                LostOpponent = Win.SpecificFights[Lose.Name];
-            }
-
-            LostOpponent.Matches += 1;
-            LostOpponent.Losses += 1;
-
-            MinimalRecord WonOpponent = null;
-            if(!Lose.SpecificFights.TryGetValue(Lose.Name, out WonOpponent))
-            {
-                Lose.SpecificFights.Add(Win.Name, new MinimalRecord());
-                WonOpponent = Lose.SpecificFights[Win.Name];
-            }
-
-            WonOpponent.Matches += 1;
-            WonOpponent.Wins += 1;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -283,25 +286,24 @@ namespace SBRosterSort
             System.Net.Sockets.TcpClient Sock = new System.Net.Sockets.TcpClient();
             System.IO.TextReader Input;
             System.IO.TextWriter Output;
-            
+
             Nick = "justinfan54";
             Server = "irc.twitch.tv";
             Port = 6667;
             Chan = "#saltybet";
 
-            //Connect to irc server and get input and output text streams from TcpClient.
+            //Connect to irc server and get input and output text streams from TcpClient
             Sock.Connect(Server, Port);
             if(!Sock.Connected)
             {
                 Console.WriteLine("Failed to connect!");
                 return;
             }
+
             Input = new System.IO.StreamReader(Sock.GetStream());
             Output = new System.IO.StreamWriter(Sock.GetStream());
 
-            Output.Write(
-                "NICK " + Nick + "\r\n"
-            );
+            Output.Write("NICK " + Nick + "\r\n");
             Output.Flush();
 
             //Process each line received from irc server
@@ -326,6 +328,7 @@ namespace SBRosterSort
                     Output.Flush();
                 }
 
+                //Login complete
                 if(Buf.Contains(":" + Nick + ".tmi.twitch.tv"))
                 {
                     m_StreamInput = Input;
@@ -348,6 +351,18 @@ namespace SBRosterSort
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             m_PollChatThread.Abort();
+        }
+
+        private void BtnSave_Click(object sender, EventArgs e)
+        {
+            var Data = new {X = m_XTier, S = m_STier, A = m_ATier, B = m_BTier };
+
+            string StringData = JsonConvert.SerializeObject(Data, Formatting.Indented);
+
+            using(System.IO.StreamWriter Writer = new System.IO.StreamWriter("SBData.json"))
+            {
+                Writer.Write(StringData);
+            }
         }
     }
 }
