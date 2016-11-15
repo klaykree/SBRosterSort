@@ -28,18 +28,16 @@ namespace SBRosterSort
             public uint Losses = 0;
         }
 
-        struct SpecificFight
+        class SpecificFight
         {
-            public SpecificFight(uint NameSplitIndex)
+            public SpecificFight(int NameSplitIndex)
             {
                 this.NameSplitIndex = NameSplitIndex;
-                Fighter1Wins = 0;
-                Fighter2Wins = 0;
         }
 
-            public uint NameSplitIndex;
-            public uint Fighter1Wins;
-            public uint Fighter2Wins;
+            public int NameSplitIndex;
+            public uint Fighter1Wins = 0;
+            public uint Fighter2Wins = 0;
         }
 
         struct FighterPair
@@ -53,13 +51,9 @@ namespace SBRosterSort
 
         Thread m_PollChatThread;
 
-        Dictionary<string, Record> m_XTier = new Dictionary<string, Record>();
-        Dictionary<string, Record> m_STier = new Dictionary<string, Record>();
-        Dictionary<string, Record> m_ATier = new Dictionary<string, Record>();
-        Dictionary<string, Record> m_BTier = new Dictionary<string, Record>();
+        Dictionary<string, Record> m_Fighters = new Dictionary<string, Record>();
         Dictionary<string, SpecificFight> m_SpecificFights = new Dictionary<string, SpecificFight>();
-
-        Dictionary<string, Record> m_CurrentTier;
+        
         FighterPair m_CurrentFighters;
 
         public SBSort()
@@ -138,35 +132,7 @@ namespace SBRosterSort
 
         void ParseOpenBetsMessage(string a_Message)
         {
-            m_CurrentTier = GetCurrentTier(a_Message);
             m_CurrentFighters = GetCurrentFighters(a_Message);
-        }
-
-        Dictionary<string, Record> GetCurrentTier(string a_Message)
-        {
-            int MatchmakingIndex = a_Message.IndexOf("Tier) (matchmaking)");
-
-            if(MatchmakingIndex != -1)
-            {
-                if(a_Message[MatchmakingIndex - 2] == 'X')
-                {
-                    return m_XTier;
-                }
-                if(a_Message[MatchmakingIndex - 2] == 'S')
-                {
-                    return m_STier;
-                }
-                if(a_Message[MatchmakingIndex - 2] == 'A')
-                {
-                    return m_ATier;
-                }
-                else if(a_Message[MatchmakingIndex - 2] == 'B')
-                {
-                    return m_BTier;
-                }
-            }
-
-            return null;
         }
 
         //waifu4u: Bets are OPEN for Prinny vs Jean pielle! (B Tier) (matchmaking)
@@ -182,26 +148,26 @@ namespace SBRosterSort
             if(RedNameIndex != -1)
             {
                 int BetweenFighterNamesIndex = a_Message.IndexOf(" vs ");
-                RedNameIndex += 9; //'OPEN for ' is 9 characters long
+                RedNameIndex += 9; //"OPEN for " is 9 characters long
 
                 RedName = a_Message.Substring(RedNameIndex, BetweenFighterNamesIndex - RedNameIndex);
 
-                int BlueNameIndex = BetweenFighterNamesIndex + 4; //' vs ' is 4 characters long
+                int BlueNameIndex = BetweenFighterNamesIndex + 4; //" vs " is 4 characters long
                 int BlueTeamNameEndIndex = a_Message.IndexOf("! (");
 
                 BlueName = a_Message.Substring(BlueNameIndex, BlueTeamNameEndIndex - BlueNameIndex);
             }
             
-            if(!m_CurrentTier.TryGetValue(RedName, out Pair.Fighter1))
+            if(!m_Fighters.TryGetValue(RedName, out Pair.Fighter1))
             {
-                m_CurrentTier.Add(RedName, new Record(RedName));
-                Pair.Fighter1 = m_CurrentTier[RedName];
+                m_Fighters.Add(RedName, new Record(RedName));
+                Pair.Fighter1 = m_Fighters[RedName];
             }
 
-            if(!m_CurrentTier.TryGetValue(BlueName, out Pair.Fighter2))
+            if(!m_Fighters.TryGetValue(BlueName, out Pair.Fighter2))
             {
-                m_CurrentTier.Add(BlueName, new Record(BlueName));
-                Pair.Fighter2 = m_CurrentTier[BlueName];
+                m_Fighters.Add(BlueName, new Record(BlueName));
+                Pair.Fighter2 = m_Fighters[BlueName];
             }
 
             return Pair;
@@ -216,13 +182,26 @@ namespace SBRosterSort
             }
 
             int LexOrder = String.Compare(m_CurrentFighters.Fighter1.Name, m_CurrentFighters.Fighter2.Name);
-            Record LowerNamed = 
-            string LexFightName = LexOrder <= 0 ? m_CurrentFighters.Fighter1.Name + m_CurrentFighters.Fighter2.Name : m_CurrentFighters.Fighter2.Name + m_CurrentFighters.Fighter1.Name;
-            if(!m_SpecificFights.ContainsKey(LexFightName))
+            Record LexLowerNamed;
+            Record LexHigherNamed;
+            if(LexOrder <= 0)
             {
-                SpecificFight Fight = new SpecificFight();
-                Fight.
+                LexLowerNamed = m_CurrentFighters.Fighter1;
+                LexHigherNamed = m_CurrentFighters.Fighter2;
+            }
+            else
+            {
+                LexLowerNamed = m_CurrentFighters.Fighter2;
+                LexHigherNamed = m_CurrentFighters.Fighter1;
+            }
+
+            SpecificFight Fight;
+            string LexFightName = LexLowerNamed.Name + LexHigherNamed.Name;
+            if(!m_SpecificFights.TryGetValue(LexFightName, out Fight))
+            {
+                Fight = new SpecificFight(LexLowerNamed.Name.Length);
                 m_SpecificFights[LexFightName] = Fight;
+                Fight = m_SpecificFights[LexFightName];
             }
             
             Record Win = null;
@@ -250,6 +229,11 @@ namespace SBRosterSort
             Win.Wins += 1;
             Lose.Matches += 1;
             Lose.Losses += 1;
+
+            if(LexLowerNamed.Name == Win.Name)
+                ++Fight.Fighter1Wins;
+            else
+                ++Fight.Fighter2Wins;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -355,7 +339,7 @@ namespace SBRosterSort
 
         private void BtnSave_Click(object sender, EventArgs e)
         {
-            var Data = new {X = m_XTier, S = m_STier, A = m_ATier, B = m_BTier };
+            var Data = new {Fighters = m_Fighters, Fights = m_SpecificFights };
 
             string StringData = JsonConvert.SerializeObject(Data, Formatting.Indented);
 
