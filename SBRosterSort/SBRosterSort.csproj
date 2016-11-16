@@ -47,6 +47,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="SaveLoad.cs" />
     <Compile Include="SBSort.cs">
       <SubType>Form</SubType>
     </Compile>

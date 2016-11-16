@@ -10,13 +10,12 @@ using System.Windows.Forms;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.IO;
-using Newtonsoft.Json;
 
 namespace SBRosterSort
 {
     public partial class SBSort : Form
     {
-        class Record
+        public class Record
         {
             public Record(string Name)
             {
@@ -29,7 +28,7 @@ namespace SBRosterSort
             public uint Losses = 0;
         }
 
-        class SpecificFight
+        public class SpecificFight
         {
             public SpecificFight(int NameSplitIndex)
             {
@@ -75,7 +74,7 @@ namespace SBRosterSort
         public void PollChat()
         {
             #if DEBUG
-            m_StreamInput = new System.IO.StreamReader("DummySB.txt");
+            //m_StreamInput = new System.IO.StreamReader("DummySB.txt");
             #endif
 
             string Buf;
@@ -346,30 +345,10 @@ namespace SBRosterSort
 
         private void BtnSave_Click(object sender, EventArgs e)
         {
-            var Data = new {Fighters = m_Fighters, Fights = m_SpecificFights };
-
-            string StringData = JsonConvert.SerializeObject(Data, Formatting.Indented);
-
-            /*int LastIndex = 1;
-            if(!Directory.Exists("Data"))
-            {
-                Directory.CreateDirectory("Data");
-            }
-            else
-            {
-                string[] DataNames = Directory.GetFiles("Data");
-                Array.Sort(DataNames);
-                string LastNumber = DataNames[DataNames.Length - 1].Substring(10);
-                LastNumber = LastNumber.Remove(LastNumber.IndexOf('.'));
-                LastIndex = Convert.ToInt32(LastNumber);
-                ++LastIndex;
-            }*/
-
-            //using(System.IO.StreamWriter Writer = new System.IO.StreamWriter("Data/Data_" + LastIndex + ".json"))
-            using(System.IO.StreamWriter Writer = new System.IO.StreamWriter("SBData.json"))
-            {
-                Writer.Write(StringData);
-            }
+            SaveLoad.FighterSerializeData Data = new SaveLoad.FighterSerializeData();
+            Data.Fighters = m_Fighters;
+            Data.SpecificFights = m_SpecificFights;
+            SaveLoad.Save(Data);
         }
     }
 }
