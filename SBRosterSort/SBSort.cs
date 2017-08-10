@@ -67,6 +67,14 @@ namespace SBRosterSort
 
             //Application.Idle += HandleApplicationIdle;
 
+            SaveLoad.FighterSerializeData FighterData = SaveLoad.Load();
+
+            if(FighterData != null)
+            {
+                m_Fighters = new Dictionary<string, Record>(FighterData.Fighters);
+                m_SpecificFights = new Dictionary<string, SpecificFight>(FighterData.SpecificFights);
+            }
+
             m_PollChatThread = new Thread(new ThreadStart(PollChat));
             m_PollChatThread.Start();
         }

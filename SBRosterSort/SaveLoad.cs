@@ -47,14 +47,21 @@ namespace SBRosterSort
         public static FighterSerializeData Load()
         {
             FighterSerializeData Data = new FighterSerializeData();
-            
-            using(StreamReader Reader = new StreamReader("SBData.json"))
-            {
-                string StringData = Reader.ReadToEnd();
-                Data = JsonConvert.DeserializeObject<FighterSerializeData>(StringData);
-            }
 
-            return Data;
+            if(File.Exists("SBData.json"))
+            {
+                using(StreamReader Reader = new StreamReader("SBData.json"))
+                {
+                    string StringData = Reader.ReadToEnd();
+                    Data = JsonConvert.DeserializeObject<FighterSerializeData>(StringData);
+                }
+
+                return Data;
+            }
+            else
+            {
+                return null;
+            }
         }
     }
 }
