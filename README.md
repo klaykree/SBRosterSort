@@ -1,5 +1,6 @@
 # SBRosterSort
-Collects data on matches from Salty Bet. Makes use of fight annoucer bot (named WAIFU4u) in twitch chat to retrieve fighter names and winner/loser.
+Collects data on matches from Salty Bet. Makes use of fight annoucer bot (named WAIFU4u) in twitch chat to retrieve fighter names and winner/loser.  
+Made with WinForms.
 
 ### Features
 - Collects wins and losses of each fighter
